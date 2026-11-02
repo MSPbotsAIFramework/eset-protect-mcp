@@ -1,5 +1,7 @@
 # PRD-21230 · Code review
 
+Status: frozen @ 16dfaf2
+
 ## Round 1 · 2026-11-02 · reviewed dev/PRD-21230 e6f49bc (base main be47d42)
 
 Verdict: changes requested
@@ -131,3 +133,74 @@ not re-duplicated there since the main document stays frozen — this round's re
 
 No test or AC was altered. No tool name, parameter, or error contract changed — this round is purely
 the two must-fix items plus the one knock-on English-only fix in this file.
+
+## Round 2 · 2026-11-02 · reviewed dev/PRD-21230 16dfaf2 (base main be47d42)
+
+Verdict: approved
+
+### Findings
+
+No must-fix. Both Round 1 must-fix items are fixed; no new must-fix found in this round's diff
+(`e6f49bc..16dfaf2`, 10 files changed: `api_client.py`, `errors.py`, `server.py`, new
+`logging_utils.py`, the three `tools/*.py` call sites, `tests/test_tools.py`, the review doc itself,
+and 2 lines of `docs/tickets/PRD-21230.md`).
+
+1. [suggestion, carried over from Round 1, still not addressed] `src/eset_protect_mcp/tools/policies.py`
+   (`eset_unassign_policy` registration) — still missing `idempotentHint` despite the Tech design
+   calling it out as naturally idempotent. Not blocking; left untouched intentionally per the Round 1
+   "Fixes" note.
+2. [suggestion, carried over from Round 1, still not addressed] `src/eset_protect_mcp/auth.py:54-61`
+   (`JwtCache._locks`) — still never pruned for expired cache keys. Not blocking.
+
+### Verified independently (not just re-reading the Round 1 "Fixes" claims)
+
+- **Must-fix 1 (Chinese text) is fixed**: `grep -rnP '[\x{4e00}-\x{9fff}]' --exclude-dir=.git
+  --exclude-dir=.venv --exclude-dir=.pytest_cache .` on `16dfaf2` — no output (confirmed clean; the two
+  flagged lines in `docs/tickets/PRD-21230.md:530,596` now read "the repo's own declared tests" / "dev
+  lock", and the review doc's own quotes of the SOP text were translated too, which Round 1's "Fixes"
+  note already flagged as a knock-on fix within scope).
+- **Must-fix 2 (no structured logging) is fixed, and credential-safe**: read `logging_utils.py` (new),
+  the `api_client.py` call-boundary logging (`log_api_call` on every branch: timeout, other
+  `httpx.HTTPError`, and the normal response path, each with `domain`/`path`/`status`/`latency_ms`/
+  `error_code`/a non-sensitive `args` summary), `errors.py`'s `run_tool_safely(tool_name, coro)` +
+  `tool_scope` binding, and `server.py`'s `request_scope` binding in the credential middleware. Traced
+  the credential path end to end: `auth.py`'s `JwtCache._authenticate` posts the password-grant request
+  via its own bare `httpx.AsyncClient.post(..., data={"username": ..., "password": ...})` call — it does
+  **not** go through `EsetConnectClient.request()`/`log_api_call` at all, so the one place credentials
+  are ever sent is structurally outside the new logging path. `api_client.py`'s `request()` only ever
+  logs `params`/`json_body`, which are the tool's own business arguments (never the Header-derived
+  credentials, which only ever reach the separately-built `Authorization` header). Confirmed all 11
+  `@mcp.tool` call sites (`devices.py` x3, `detections.py` x3, `policies.py` x5) and all 9 direct
+  `run_tool_safely(...)` call sites in `tests/test_tools.py` were updated to the new 2-arg signature
+  (`grep -rn "run_tool_safely(" --include="*.py" .` — 20 call sites total, all consistent; this also
+  means `uv run pytest` would have failed with a `TypeError` if any call site had been missed, which it
+  did not).
+- **Ran the gates myself, not just re-read the Self-test/Fixes tables**:
+  - `uv sync && uv run pytest -q` on `16dfaf2`: **17 passed** (installed `uv` fresh into this review
+    sandbox first; matches the Fixes-section table).
+  - `sudo docker build --platform linux/amd64 -t eset-protect-mcp:review2-verify .`: succeeded.
+  - Container smoke test against the freshly built image: `GET /health` → 200; `tools/list` with no
+    headers → 401 listing all three missing header names.
+  - **End-to-end credential-leak check against the running container** (stronger than Round 1's
+    standalone script, which exercised the module directly rather than the real HTTP server): called
+    `tools/call eset_list_devices` with a distinctive fake username/password/`X-Eset-Region: us`. The
+    container's outbound call reached the real `us.business-account.iam.eset.systems` host (this
+    sandbox has outbound network access to it) and got back `400 Bad Request`, which `auth.py` maps to
+    `{"error":{"code":"unauthorized", ...}}` — confirming the credential-rejection path runs end to end.
+    Grepped the container's full log output for the fake password string and for the substring
+    `Bearer`: neither appears anywhere in the logs. (This exercises `auth.py`'s own unlogged POST, not
+    `api_client.log_api_call`, since auth failure short-circuits before any ESET Connect resource call
+    is made — but it is exactly the path real bad or in-flight credentials would take, and it stayed
+    clean.)
+  - `diff <(sed -n '1,71p' ~/.claude/skills/vendor-mcp-development/reference/readme-connector-section.md)
+    <(sed -n '19,89p' README.md)`: exit 0, byte-for-byte match, unchanged by this round.
+  - `git merge-base --is-ancestor 16dfaf2 origin/main`: not an ancestor (not yet merged, as expected
+    before this review passes); `origin/main` is still at `be47d42`, matching the `[DEV]` stub's `BASE`,
+    so no re-sync is needed before merging.
+  - `gitleaks` is not installed in this review sandbox; not independently re-run. Round 1's "Fixes"
+    table reports "no leaks found" (5 commits scanned) on this same diff — taken as-is, not verified.
+
+Approved — merging into `main`, publishing to INT, and the connector wiki are the review leg's next
+steps (`references/mcp-track.md` §4.4/§4.5), not part of this review record.
+
+Status: frozen @ 16dfaf2
