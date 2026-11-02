@@ -25,6 +25,7 @@ from starlette.routing import Mount, Route
 from eset_protect_mcp.api_client import EsetConnectClient, get_http_client
 from eset_protect_mcp.auth import JwtCache
 from eset_protect_mcp.errors import ToolError
+from eset_protect_mcp.logging_utils import new_request_id, request_scope
 from eset_protect_mcp.regions import VALID_REGIONS, Region, parse_region
 from eset_protect_mcp.tools import detections, devices, policies
 
@@ -99,47 +100,53 @@ def _missing_headers(request: Request) -> list[str]:
 
 
 async def _credential_middleware(request: Request, call_next):
-    if not request.url.path.startswith(MCP_MOUNT_PREFIX):
-        return await call_next(request)
+    # One correlation id per incoming request, bound for the lifetime of the
+    # whole request (including the early-reject paths below) so every
+    # structured log line emitted while handling it -- in particular
+    # api_client.py's per-ESET-call log -- can be grouped back to it
+    # (Tech design "Observability"; SOP §6).
+    with request_scope(new_request_id()):
+        if not request.url.path.startswith(MCP_MOUNT_PREFIX):
+            return await call_next(request)
 
-    missing = _missing_headers(request)
-    if missing:
-        return JSONResponse(
-            {
-                "error": {
-                    "code": "unauthorized",
-                    "message": f"Missing required header(s): {', '.join(missing)}",
-                    "missing_headers": missing,
-                }
-            },
-            status_code=401,
+        missing = _missing_headers(request)
+        if missing:
+            return JSONResponse(
+                {
+                    "error": {
+                        "code": "unauthorized",
+                        "message": f"Missing required header(s): {', '.join(missing)}",
+                        "missing_headers": missing,
+                    }
+                },
+                status_code=401,
+            )
+
+        region = parse_region(request.headers[HEADER_REGION])
+        if region is None:
+            return JSONResponse(
+                {
+                    "error": {
+                        "code": "invalid_argument",
+                        "message": (
+                            f"Invalid {HEADER_REGION}: {request.headers[HEADER_REGION]!r}; "
+                            f"must be one of {VALID_REGIONS}"
+                        ),
+                    }
+                },
+                status_code=400,
+            )
+
+        creds = Credentials(
+            username=request.headers[HEADER_USERNAME],
+            password=request.headers[HEADER_PASSWORD],
+            region=region,
         )
-
-    region = parse_region(request.headers[HEADER_REGION])
-    if region is None:
-        return JSONResponse(
-            {
-                "error": {
-                    "code": "invalid_argument",
-                    "message": (
-                        f"Invalid {HEADER_REGION}: {request.headers[HEADER_REGION]!r}; "
-                        f"must be one of {VALID_REGIONS}"
-                    ),
-                }
-            },
-            status_code=400,
-        )
-
-    creds = Credentials(
-        username=request.headers[HEADER_USERNAME],
-        password=request.headers[HEADER_PASSWORD],
-        region=region,
-    )
-    token = _credentials_var.set(creds)
-    try:
-        return await call_next(request)
-    finally:
-        _credentials_var.reset(token)
+        token = _credentials_var.set(creds)
+        try:
+            return await call_next(request)
+        finally:
+            _credentials_var.reset(token)
 
 
 async def _health(_: Request) -> JSONResponse:

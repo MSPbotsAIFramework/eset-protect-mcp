@@ -125,7 +125,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             limit: Max policies to return (default 50, hard cap 200).
         """
 
-        return await run_tool_safely(_list_policies(client_factory, limit))
+        return await run_tool_safely("eset_list_policies", _list_policies(client_factory, limit))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def eset_get_policy(policy_uuid: str) -> str:
@@ -135,7 +135,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             policy_uuid: The policy's ESET Connect UUID.
         """
 
-        return await run_tool_safely(_get_policy(client_factory, policy_uuid))
+        return await run_tool_safely("eset_get_policy", _get_policy(client_factory, policy_uuid))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def eset_list_policy_assignments(
@@ -152,7 +152,8 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """
 
         return await run_tool_safely(
-            _list_policy_assignments(client_factory, device_uuid, group_uuid, limit)
+            "eset_list_policy_assignments",
+            _list_policy_assignments(client_factory, device_uuid, group_uuid, limit),
         )
 
     @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
@@ -172,7 +173,8 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """
 
         return await run_tool_safely(
-            _assign_policy(client_factory, policy_uuid, device_uuid, group_uuid)
+            "eset_assign_policy",
+            _assign_policy(client_factory, policy_uuid, device_uuid, group_uuid),
         )
 
     @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
@@ -183,4 +185,6 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             assignment_uuid: The policy assignment's ESET Connect UUID.
         """
 
-        return await run_tool_safely(_unassign_policy(client_factory, assignment_uuid))
+        return await run_tool_safely(
+            "eset_unassign_policy", _unassign_policy(client_factory, assignment_uuid)
+        )

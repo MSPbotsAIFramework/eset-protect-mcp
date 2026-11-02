@@ -73,7 +73,9 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             limit: Max groups to return (default 50, hard cap 200).
         """
 
-        return await run_tool_safely(_list_device_groups(client_factory, limit))
+        return await run_tool_safely(
+            "eset_list_device_groups", _list_device_groups(client_factory, limit)
+        )
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def eset_list_devices(group_uuid: str | None = None, limit: int | None = None) -> str:
@@ -84,7 +86,9 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             limit: Max devices to return (default 50, hard cap 200).
         """
 
-        return await run_tool_safely(_list_devices(client_factory, group_uuid, limit))
+        return await run_tool_safely(
+            "eset_list_devices", _list_devices(client_factory, group_uuid, limit)
+        )
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def eset_get_device(device_uuid: str) -> str:
@@ -94,4 +98,4 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             device_uuid: The device's ESET Connect UUID.
         """
 
-        return await run_tool_safely(_get_device(client_factory, device_uuid))
+        return await run_tool_safely("eset_get_device", _get_device(client_factory, device_uuid))

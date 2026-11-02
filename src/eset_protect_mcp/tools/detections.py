@@ -132,7 +132,8 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """
 
         return await run_tool_safely(
-            _list_detections(client_factory, status, severity, device_uuid, limit)
+            "eset_list_detections",
+            _list_detections(client_factory, status, severity, device_uuid, limit),
         )
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -143,7 +144,9 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             detection_uuid: The detection's ESET Connect UUID.
         """
 
-        return await run_tool_safely(_get_detection(client_factory, detection_uuid))
+        return await run_tool_safely(
+            "eset_get_detection", _get_detection(client_factory, detection_uuid)
+        )
 
     @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
     async def eset_resolve_detection(detection_uuid: str, note: str | None = None) -> str:
@@ -155,4 +158,6 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
             note: Optional free-text note to attach to the resolution.
         """
 
-        return await run_tool_safely(_resolve_detection(client_factory, detection_uuid, note))
+        return await run_tool_safely(
+            "eset_resolve_detection", _resolve_detection(client_factory, detection_uuid, note)
+        )

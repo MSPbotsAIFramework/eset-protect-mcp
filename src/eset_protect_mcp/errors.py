@@ -11,6 +11,8 @@ import json
 from dataclasses import dataclass
 from typing import Awaitable, Literal
 
+from eset_protect_mcp.logging_utils import log_unexpected_error, tool_scope
+
 ErrorCode = Literal[
     "not_configured",
     "unauthorized",
@@ -63,21 +65,27 @@ def error_envelope(code: ErrorCode, message: str, retryable: bool | None = None)
     return ToolError(code=code, message=message, retryable=retryable).to_json()
 
 
-async def run_tool_safely(coro: Awaitable[str]) -> str:
+async def run_tool_safely(tool_name: str, coro: Awaitable[str]) -> str:
     """Every tool body is wrapped in this: tools never raise (SOP §4.1), they
     return the error envelope as a normal string result instead.
+
+    ``tool_name`` binds the active-tool context (logging_utils.tool_scope) so
+    every structured log line emitted while ``coro`` runs -- in particular
+    api_client.py's per-call log -- carries it (Tech design "Observability").
     """
 
-    try:
-        return await coro
-    except ToolError as exc:
-        return exc.to_json()
-    except Exception as exc:  # pragma: no cover - defensive last resort
-        # Never echo the raw exception text here: it could be an httpx error
-        # that embeds request details. Keep the message generic.
-        return error_envelope(
-            "upstream_error", f"Unexpected error: {type(exc).__name__}"
-        )
+    with tool_scope(tool_name):
+        try:
+            return await coro
+        except ToolError as exc:
+            return exc.to_json()
+        except Exception as exc:  # pragma: no cover - defensive last resort
+            # Never echo the raw exception text here: it could be an httpx
+            # error that embeds request details. Keep the message generic.
+            log_unexpected_error(exc)
+            return error_envelope(
+                "upstream_error", f"Unexpected error: {type(exc).__name__}"
+            )
 
 
 def map_status_code(status_code: int, message: str) -> ToolError:

@@ -55,7 +55,7 @@ async def test_list_devices_default_limit_and_has_more(set_credentials):
         return_value=httpx.Response(200, json={"devices": page, "nextPageToken": "page-2"})
     )
 
-    result = await run_tool_safely(_list_devices(get_client, None, None))
+    result = await run_tool_safely("eset_list_devices", _list_devices(get_client, None, None))
     data = json.loads(result)
 
     assert "error" not in data
@@ -74,7 +74,7 @@ async def test_list_devices_limit_clamped_to_hard_cap(set_credentials):
         return_value=httpx.Response(200, json={"devices": page, "nextPageToken": ""})
     )
 
-    result = await run_tool_safely(_list_devices(get_client, None, 9999))
+    result = await run_tool_safely("eset_list_devices", _list_devices(get_client, None, 9999))
     data = json.loads(result)
 
     assert "error" not in data
@@ -93,7 +93,7 @@ async def test_get_device_not_found_maps_to_error_envelope(set_credentials):
         return_value=httpx.Response(404, json={"message": "not found"})
     )
 
-    result = await run_tool_safely(_get_device(get_client, "missing-uuid"))
+    result = await run_tool_safely("eset_get_device", _get_device(get_client, "missing-uuid"))
     data = json.loads(result)
 
     assert data["error"]["code"] == "not_found"
@@ -109,7 +109,7 @@ async def test_list_detections_empty_result_is_not_an_error(set_credentials):
     )
 
     result = await run_tool_safely(
-        _list_detections(get_client, "resolved", "high", None, None)
+        "eset_list_detections", _list_detections(get_client, "resolved", "high", None, None)
     )
     data = json.loads(result)
 
@@ -125,7 +125,9 @@ async def test_resolve_already_resolved_detection_does_not_raise(set_credentials
         "https://eu.incident-management.eset.systems/v2/detections/det-1:resolve"
     ).mock(return_value=httpx.Response(409, json={"message": "already resolved"}))
 
-    result = await run_tool_safely(_resolve_detection(get_client, "det-1", None))
+    result = await run_tool_safely(
+        "eset_resolve_detection", _resolve_detection(get_client, "det-1", None)
+    )
     data = json.loads(result)
 
     assert "error" not in data
@@ -139,7 +141,8 @@ async def test_assign_policy_requires_explicit_target(set_credentials):
     # client-side validation did not run first, the attempted outbound call
     # would surface as upstream_error (unmocked request), not invalid_argument.
     result = await run_tool_safely(
-        _assign_policy(get_client, "policy-1", device_uuid=None, group_uuid=None)
+        "eset_assign_policy",
+        _assign_policy(get_client, "policy-1", device_uuid=None, group_uuid=None),
     )
     data = json.loads(result)
 
@@ -154,7 +157,9 @@ async def test_unassign_policy_not_found_maps_to_error_envelope(set_credentials)
         return_value=httpx.Response(404, json={"message": "not found"})
     )
 
-    result = await run_tool_safely(_unassign_policy(get_client, "assign-missing"))
+    result = await run_tool_safely(
+        "eset_unassign_policy", _unassign_policy(get_client, "assign-missing")
+    )
     data = json.loads(result)
 
     assert data["error"]["code"] == "not_found"
@@ -177,7 +182,7 @@ async def test_rate_limited_retry_then_success(set_credentials, monkeypatch):
     ]
     respx.get(DEVICES_URL).mock(side_effect=responses)
 
-    result = await run_tool_safely(_list_devices(get_client, None, None))
+    result = await run_tool_safely("eset_list_devices", _list_devices(get_client, None, None))
     data = json.loads(result)
 
     assert "error" not in data
@@ -198,7 +203,7 @@ async def test_rate_limited_exhausted_maps_to_error_envelope(set_credentials, mo
         side_effect=lambda request: httpx.Response(429, headers={"Retry-After": "0"})
     )
 
-    result = await run_tool_safely(_list_devices(get_client, None, None))
+    result = await run_tool_safely("eset_list_devices", _list_devices(get_client, None, None))
     data = json.loads(result)
 
     assert data["error"]["code"] == "rate_limited"

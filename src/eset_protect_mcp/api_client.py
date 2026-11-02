@@ -18,7 +18,8 @@ from typing import Any
 
 import httpx
 
-from eset_protect_mcp.errors import ToolError
+from eset_protect_mcp.errors import ToolError, map_status_code
+from eset_protect_mcp.logging_utils import log_api_call
 from eset_protect_mcp.regions import ApiDomain, Region, domain_host
 
 CONNECT_TIMEOUT = 5.0
@@ -96,6 +97,7 @@ class EsetConnectClient:
         url = f"https://{domain_host(self._region, domain)}{path}"
         headers = {"Authorization": f"Bearer {self._token}"}
         deadline = time.monotonic() + TOTAL_BUDGET_SECONDS
+        started = time.monotonic()
 
         attempt = 0
         while True:
@@ -105,10 +107,30 @@ class EsetConnectClient:
                     method, url, params=params, json=json_body, headers=headers
                 )
             except httpx.TimeoutException as exc:
+                # status=0: a network-level failure, never reached ESET Connect
+                # far enough to get an HTTP response.
+                log_api_call(
+                    domain=domain.value,
+                    path=path,
+                    status_code=0,
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    error_code="upstream_error",
+                    params=params,
+                    json_body=json_body,
+                )
                 raise ToolError(
                     "upstream_error", f"ESET Connect request timed out: {method} {path}"
                 ) from exc
             except httpx.HTTPError as exc:
+                log_api_call(
+                    domain=domain.value,
+                    path=path,
+                    status_code=0,
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    error_code="upstream_error",
+                    params=params,
+                    json_body=json_body,
+                )
                 raise ToolError(
                     "upstream_error", f"ESET Connect request failed: {method} {path}: {exc}"
                 ) from exc
@@ -122,4 +144,19 @@ class EsetConnectClient:
                     delay = _DEFAULT_BACKOFF_SECONDS * (2 ** (attempt - 1))
                 await asyncio.sleep(min(delay, remaining))
                 continue
+
+            error_code = (
+                map_status_code(response.status_code, "").code
+                if response.status_code >= 400
+                else None
+            )
+            log_api_call(
+                domain=domain.value,
+                path=path,
+                status_code=response.status_code,
+                latency_ms=(time.monotonic() - started) * 1000,
+                error_code=error_code,
+                params=params,
+                json_body=json_body,
+            )
             return response
