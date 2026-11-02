@@ -107,8 +107,8 @@
       "Locate the Header table and the MSPbots Connector section"
     ],
     "expect": "README.md contains a 3-row table (X-Eset-Username, X-Eset-Password, X-Eset-Region) with required/meaning/where-to-obtain columns, and the MSPbots Connector section matches reference/readme-connector-section.md verbatim",
-    "result": "untested",
-    "evidence": ""
+    "result": "pass",
+    "evidence": "README.md '## Authentication headers' has the 3-row table (X-Eset-Username/X-Eset-Password/X-Eset-Region, all Required=Yes) with Required/Meaning/Where-to-obtain columns. `diff <(sed -n '1,71p' ~/.claude/skills/vendor-mcp-development/reference/readme-connector-section.md) <(extracted README section)` -> exit 0 (byte-for-byte match)."
   },
   {
     "id": "TC16",
@@ -120,8 +120,8 @@
       "Compare against the Non-goals list in the Product design section"
     ],
     "expect": "No tool exposes device move/rename/create/delete, EDR rule/exclusion authoring, MSP Administrator, Hub, Secure Authentication, or Threat Intelligence operations",
-    "result": "untested",
-    "evidence": ""
+    "result": "pass",
+    "evidence": "`await build_mcp().list_tools()` -> exactly 11 names: eset_assign_policy, eset_get_detection, eset_get_device, eset_get_policy, eset_list_detections, eset_list_device_groups, eset_list_devices, eset_list_policies, eset_list_policy_assignments, eset_resolve_detection, eset_unassign_policy. None move/rename/create/delete a device, author EDR rules/exclusions, or touch MSP Administrator/Hub/Secure Authentication/Threat Intelligence."
   },
   {
     "id": "TC17",
