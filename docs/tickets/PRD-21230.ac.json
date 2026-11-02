@@ -1,0 +1,165 @@
+[
+  {
+    "id": "TC1",
+    "ac": "AC1",
+    "text": "Given a tools/list call with valid credential Headers, When the server responds, Then it returns exactly the 11 eset_* tools, each description <= 500 characters",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_tools_list_snapshot"]
+  },
+  {
+    "id": "TC2",
+    "ac": "AC2",
+    "text": "Given a POST /mcp request missing one or more of X-Eset-Username, X-Eset-Password, X-Eset-Region, When the server handles it, Then it returns 401 listing the missing Header name(s) and makes no outbound call",
+    "type": "auto",
+    "tests": ["tests/test_middleware.py::test_missing_header_returns_401_with_header_names"]
+  },
+  {
+    "id": "TC3",
+    "ac": "AC3",
+    "text": "Given GET /health with no Headers and ESET Connect mocked unreachable, When called, Then it still returns 200 {\"status\":\"ok\"}",
+    "type": "auto",
+    "tests": ["tests/test_middleware.py::test_health_does_not_depend_on_upstream"]
+  },
+  {
+    "id": "TC4",
+    "ac": "AC4",
+    "text": "Given eset_list_devices called with no limit, When the mocked API returns more than 50 devices, Then the tool returns at most 50 items and has_more=true",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_list_devices_default_limit_and_has_more"]
+  },
+  {
+    "id": "TC5",
+    "ac": "AC4",
+    "text": "Given eset_list_devices called with limit=9999, When handled, Then the effective limit sent upstream is clamped to 200, not rejected",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_list_devices_limit_clamped_to_hard_cap"]
+  },
+  {
+    "id": "TC6",
+    "ac": "AC5",
+    "text": "Given eset_get_device with a deviceUuid the mocked API reports 404 for, When handled, Then the tool returns {\"error\":{\"code\":\"not_found\",\"retryable\":false}}",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_get_device_not_found_maps_to_error_envelope"]
+  },
+  {
+    "id": "TC7",
+    "ac": "AC6",
+    "text": "Given eset_list_detections with a filter matching nothing in the mocked API, When handled, Then the tool returns {\"items\":[],\"has_more\":false}, not a not_found error",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_list_detections_empty_result_is_not_an_error"]
+  },
+  {
+    "id": "TC8",
+    "ac": "AC7",
+    "text": "Given eset_resolve_detection on a detectionUuid the mocked API reports as already-resolved (409), When handled, Then the tool returns a structured outcome, never an unhandled exception",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_resolve_already_resolved_detection_does_not_raise"]
+  },
+  {
+    "id": "TC9",
+    "ac": "AC8",
+    "text": "Given eset_assign_policy called with neither deviceUuid nor groupUuid, When handled, Then it is rejected client-side with {\"error\":{\"code\":\"invalid_argument\"}} before any outbound call",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_assign_policy_requires_explicit_target"]
+  },
+  {
+    "id": "TC10",
+    "ac": "AC9",
+    "text": "Given eset_unassign_policy with an assignmentUuid the mocked API reports 404 for, When handled, Then the tool returns {\"error\":{\"code\":\"not_found\",\"retryable\":false}}",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_unassign_policy_not_found_maps_to_error_envelope"]
+  },
+  {
+    "id": "TC11",
+    "ac": "AC10",
+    "text": "Given the mocked API returns 429 with Retry-After: 1 then succeeds, When a tool call is in flight, Then it retries once honoring Retry-After and returns the successful result; given it keeps returning 429, Then it returns {\"error\":{\"code\":\"rate_limited\",\"retryable\":true}}",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_rate_limited_retry_then_success", "tests/test_tools.py::test_rate_limited_exhausted_maps_to_error_envelope"]
+  },
+  {
+    "id": "TC12",
+    "ac": "AC11",
+    "text": "Given two concurrent async tool calls carrying different X-Eset-Username/X-Eset-Region Headers, When both are in flight on the same process, Then a stub tool reading the request ContextVar mid-call never observes the other request's credentials",
+    "type": "auto",
+    "tests": ["tests/test_middleware.py::test_concurrent_requests_do_not_leak_context"]
+  },
+  {
+    "id": "TC13",
+    "ac": "AC12",
+    "text": "Given a second tool call reuses the same X-Eset-Username/X-Eset-Region within the cache TTL, When handled, Then auth.py does not call the mocked token endpoint a second time",
+    "type": "auto",
+    "tests": ["tests/test_regions.py::test_jwt_cache_hit_skips_token_call"]
+  },
+  {
+    "id": "TC14",
+    "ac": "AC12",
+    "text": "Given the cached JWT entry is forced to an expired state, When a tool call reuses the same credentials, Then auth.py calls the mocked token endpoint again",
+    "type": "auto",
+    "tests": ["tests/test_regions.py::test_jwt_cache_miss_after_expiry_reauths"]
+  },
+  {
+    "id": "TC15",
+    "ac": "AC13",
+    "text": "Given a fresh clone of the repo, When reading README.md, Then it documents the 3 required Headers and includes the MSPbots Connector section verbatim",
+    "type": "manual",
+    "steps": [
+      "Open README.md on the work branch",
+      "Locate the Header table and the MSPbots Connector section"
+    ],
+    "expect": "README.md contains a 3-row table (X-Eset-Username, X-Eset-Password, X-Eset-Region) with required/meaning/where-to-obtain columns, and the MSPbots Connector section matches reference/readme-connector-section.md verbatim",
+    "result": "pass",
+    "evidence": "README.md '## Authentication headers' has the 3-row table (X-Eset-Username/X-Eset-Password/X-Eset-Region, all Required=Yes) with Required/Meaning/Where-to-obtain columns. `diff <(sed -n '1,71p' ~/.claude/skills/vendor-mcp-development/reference/readme-connector-section.md) <(extracted README section)` -> exit 0 (byte-for-byte match)."
+  },
+  {
+    "id": "TC16",
+    "ac": "AC14",
+    "text": "Given the final tool list, When compared against the Non-goals list, Then no excluded capability (device lifecycle writes, EDR rule/exclusion authoring, MSP Administrator, Hub, Secure Authentication, Threat Intelligence) is exposed",
+    "type": "manual",
+    "steps": [
+      "List every registered tool name from server.py / tools/*.py",
+      "Compare against the Non-goals list in the Product design section"
+    ],
+    "expect": "No tool exposes device move/rename/create/delete, EDR rule/exclusion authoring, MSP Administrator, Hub, Secure Authentication, or Threat Intelligence operations",
+    "result": "pass",
+    "evidence": "`await build_mcp().list_tools()` -> exactly 11 names: eset_assign_policy, eset_get_detection, eset_get_device, eset_get_policy, eset_list_detections, eset_list_device_groups, eset_list_devices, eset_list_policies, eset_list_policy_assignments, eset_resolve_detection, eset_unassign_policy. None move/rename/create/delete a device, author EDR rules/exclusions, or touch MSP Administrator/Hub/Secure Authentication/Threat Intelligence."
+  },
+  {
+    "id": "TC17",
+    "ac": "AC1",
+    "text": "Given a real ESET Connect API User account, When initialize -> tools/list -> tools/call eset_list_devices is run against the deployed service, Then it returns the real device list for that tenant",
+    "type": "manual",
+    "steps": [
+      "Needs a real ESET Connect tenant: obtain an API User (username/password) and its region",
+      "Run initialize -> tools/list -> tools/call eset_list_devices against the deployed service with real Headers"
+    ],
+    "expect": "tools/list returns the 11 eset_* tools; eset_list_devices returns a real device list shaped per the Data & API contract section",
+    "result": "blocked",
+    "evidence": "needs a real ESET Connect tenant; not executed by this pipeline; not blocking merge, self-test, 6b or 6c per vendor-mcp-development's no-test-account rule"
+  },
+  {
+    "id": "TC18",
+    "ac": "AC6",
+    "text": "Given a real ESET Connect API User account, When tools/call eset_list_detections is run against the deployed service, Then it returns the real detection list (or an empty list) for that tenant",
+    "type": "manual",
+    "steps": [
+      "Needs a real ESET Connect tenant",
+      "Run tools/call eset_list_detections against the deployed service with real Headers"
+    ],
+    "expect": "Returns a real detection list, or an empty list if the tenant has none, shaped per the Data & API contract section",
+    "result": "blocked",
+    "evidence": "needs a real ESET Connect tenant; not executed; not blocking"
+  },
+  {
+    "id": "TC19",
+    "ac": "AC8",
+    "text": "Given a real ESET Connect API User account and a disposable test device/group, When eset_list_policies then eset_assign_policy are run against the deployed service, Then the assignment succeeds and is visible via eset_list_policy_assignments",
+    "type": "manual",
+    "steps": [
+      "Needs a real ESET Connect tenant",
+      "Run tools/call eset_list_policies, then eset_assign_policy against a disposable test device/group"
+    ],
+    "expect": "Returns a real policy list; assignment succeeds and is visible via eset_list_policy_assignments",
+    "result": "blocked",
+    "evidence": "needs a real ESET Connect tenant; not executed; not blocking"
+  }
+]
